@@ -1,0 +1,142 @@
+name: Compile
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - released
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ env.VERSION }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Load environment variables
+        uses: k15g/action-load-env@edge
+
+      - name: Prepare version labels
+        uses: k15g/action-version-labels@edge
+
+      - name: Fetch SchXslt
+        run: make download
+
+      - name: Upload source
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ github.event.repository.name }}-source-${{ env.VERSION }}
+          path: src/*
+          retention-days: 5
+
+  compile:
+    name: Compiles
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - compile_saxonjs
+
+    steps:
+      - name: Print version
+        run: echo ${{ needs.prepare.outputs.version }}
+
+  compile_saxonjs:
+    name: Compile with SaxonJS
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+
+    strategy:
+      matrix:
+        version:
+          - 2.3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Download source
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ github.event.repository.name }}-source-${{ needs.prepare.outputs.version }}
+          path: src
+
+      - name: Compile xslts
+        run: |
+          npm install xslt3@${{ matrix.version }}
+          npx xslt3 -nogo -t -xsl:src/2.0/include.xsl -export:dist/include.sef.json
+          npx xslt3 -nogo -t -xsl:src/2.0/expand.xsl -export:dist/expand.sef.json
+          npx xslt3 -nogo -t -xsl:src/2.0/compile-for-svrl.xsl -export:dist/compile-for-svrl.sef.json
+          npx xslt3 -nogo -t -xsl:src/2.0/pipeline-for-svrl.xsl -export:dist/pipeline-for-svrl.sef.json
+          cp src/LICENSE dist/
+
+      - name: Upload compiled resources
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ github.event.repository.name }}-saxonjs-${{ matrix.version }}-${{ needs.prepare.outputs.version }}
+          path: dist/*
+          retention-days: 5
+
+  publish:
+    name: Publishing
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - npm
+
+    steps:
+      - name: Print version
+        run: echo ${{ needs.prepare.outputs.version }}
+
+  npm:
+    name: Publish to GitHub Packages
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - compile
+
+    strategy:
+      matrix:
+        version:
+          - 2.3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setting up npm authentication
+        run: |
+          npm config set registry https://npm.pkg.github.com
+          npm set //npm.pkg.github.com/:_authToken ${{ secrets.BOT_TOKEN }}
+
+      - name: Download compiled resources
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ github.event.repository.name }}-saxonjs-${{ matrix.version }}-${{ needs.prepare.outputs.version }}
+          path: dist
+
+      - name: Create package.json
+        uses: k15g/action-json-merge@edge
+        with:
+          file: dist/package.json
+          data: |
+            name: '@${{ github.repository }}-saxonjs-${{ matrix.version }}'
+            version: ${{ needs.prepare.outputs.version }}
+            repository: https://github.com/${{ github.repository }}
+            publishConfig:
+              registry: https://npm.pkg.github.com
+
+      - name: Read package.js
+        run: cat dist/package.json | jq .
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm publish ./dist
