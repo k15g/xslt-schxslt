@@ -38,7 +38,7 @@ jobs:
           retention-days: 5
 
   compile:
-    name: Compiles
+    name: ✅ Compiling completed
     runs-on: ubuntu-latest
     needs:
       - prepare
@@ -86,7 +86,7 @@ jobs:
           retention-days: 5
 
   publish:
-    name: Publishing
+    name: ✅ Publishing completed
     runs-on: ubuntu-latest
     needs:
       - prepare
