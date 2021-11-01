@@ -11,11 +11,15 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
+      updated: ${{ steps.detect.outputs.result }}
       version: ${{ steps.release.outputs.version }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+
+      - name: Load environment variables
+        uses: k15g/action-load-env@v1
 
       - name: Fetch release info
         id: release
@@ -25,10 +29,18 @@ jobs:
           owner: schxslt
           repo: schxslt
 
+      - uses: actions/github-script@v5
+        id: detect
+        with:
+          result-encoding: boolean
+          script: return "${{ steps.release.outputs.version }}" != "${{ env.SCHXSLT_VERSION }}"
+
       - name: Write version to environment
+        if: steps.detect.outputs.result
         run: echo -n ${{ steps.release.outputs.version }} > .env/SCHXSLT_VERSION
 
       - name: Commit and push potential changes
+        if: steps.detect.outputs.result
         uses: actions-js/push@master
         with:
           message: Detected version ${{ steps.release.outputs.version }}
@@ -36,3 +48,28 @@ jobs:
           branch: main
           author_name: ${{ secrets.BOT_USERNAME }}
           author_email: ${{ secrets.BOT_EMAIL }}
+
+  release:
+    name: 🏁 Release
+    runs-on: ubuntu-latest
+    environment: release
+    needs:
+      - watch
+    if: needs.watch.outputs.updated
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Load environment variables
+        uses: k15g/action-load-env@v1
+
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.BOT_TOKEN }}
+          commit: main
+          tag: v${{ env.SCHXSLT_VERSION }}
