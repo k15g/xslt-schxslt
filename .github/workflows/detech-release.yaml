@@ -1,0 +1,38 @@
+name: Detect release
+
+on:
+  schedule:
+    - cron: "14 13 * * *"
+  workflow_dispatch:
+
+jobs:
+  watch:
+    name: 🔭 Watch
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Fetch release info
+        id: release
+        uses: k15g/action-github-release-info@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          owner: schxslt
+          repo: schxslt
+
+      - name: Write version to environment
+        run: echo -n ${{ steps.release.outputs.version }} > .env/SCHXSLT_VERSION
+
+      - name: Commit and push potential changes
+        uses: actions-js/push@master
+        with:
+          message: Detected version ${{ steps.release.outputs.version }}
+          github_token: ${{ secrets.BOT_TOKEN }}
+          branch: main
+          author_name: ${{ secrets.BOT_USERNAME }}
+          author_email: ${{ secrets.BOT_EMAIL }}
