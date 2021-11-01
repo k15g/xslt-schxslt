@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
+      hash: ${{ steps.commit.outputs.hash }}
       updated: ${{ steps.detect.outputs.result }}
       version: ${{ steps.release.outputs.version }}
 
@@ -32,7 +33,7 @@ jobs:
       - uses: actions/github-script@v5
         id: detect
         with:
-          result-encoding: boolean
+          result-encoding: json
           script: return "${{ steps.release.outputs.version }}" != "${{ env.SCHXSLT_VERSION }}"
 
       - name: Write version to environment
@@ -49,6 +50,10 @@ jobs:
           author_name: ${{ secrets.BOT_USERNAME }}
           author_email: ${{ secrets.BOT_EMAIL }}
 
+      - name: Expose commit hash
+        id: commit
+        run: echo "::set-output name=hash::$(git rev-parse HEAD)"
+
   release:
     name: 🏁 Release
     runs-on: ubuntu-latest
@@ -61,15 +66,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
+          ref: ${{ needs.watch.outputs.hash }}
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Load environment variables
-        uses: k15g/action-load-env@v1
 
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.BOT_TOKEN }}
           commit: main
-          tag: v${{ env.SCHXSLT_VERSION }}
+          tag: v${{ needs.watch.outputs.version }}
