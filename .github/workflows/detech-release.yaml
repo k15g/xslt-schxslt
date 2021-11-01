@@ -27,21 +27,21 @@ jobs:
         uses: k15g/action-github-release-info@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          owner: schxslt
-          repo: schxslt
+          repo: schxslt/schxslt
 
-      - uses: actions/github-script@v5
+      - name: Detect release
+        uses: actions/github-script@v5
         id: detect
         with:
-          result-encoding: json
+          result-encoding: string
           script: return "${{ steps.release.outputs.version }}" != "${{ env.SCHXSLT_VERSION }}"
 
       - name: Write version to environment
-        if: steps.detect.outputs.result
+        if: steps.detect.outputs.result == 'true'
         run: echo -n ${{ steps.release.outputs.version }} > .env/SCHXSLT_VERSION
 
       - name: Commit and push potential changes
-        if: steps.detect.outputs.result
+        if: steps.detect.outputs.result == 'true'
         uses: actions-js/push@master
         with:
           message: Detected version ${{ steps.release.outputs.version }}
@@ -60,7 +60,7 @@ jobs:
     environment: release
     needs:
       - watch
-    if: needs.watch.outputs.updated
+    if: needs.watch.outputs.updated == 'true'
 
     steps:
       - name: Checkout
